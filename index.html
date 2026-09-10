@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b14">
+  <meta name="description" content="Pulse — what's good around you, right now. Offline-first city discovery with a live friend layer. Built for the ACM-W Broken Brief tournament.">
+  <title>Pulse — Nearby, Right Now</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="logo"></span>Pulse</div>
+      <div class="topbar-right">
+        <button id="locChip" class="chip" title="Change location">📍 …</button>
+        <button id="netToggle" class="pill live" title="Connection"><span class="dot"></span> LIVE</button>
+        <button id="profileBtn" class="avatar" title="Profile & Sync" aria-label="Profile and sync">🙂</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- NOW feed -->
+      <section id="view-now" class="view active">
+        <div class="filters">
+          <button class="chip toggle active" id="nowToggle">⏱ Happening now</button>
+          <div class="cats" id="catChips">
+            <button class="chip active" data-cat="all">All</button>
+            <button class="chip" data-cat="food">🍜 Food</button>
+            <button class="chip" data-cat="event">🎉 Events</button>
+            <button class="chip" data-cat="fun">🎢 Fun</button>
+            <button class="chip" data-cat="chill">🌴 Chill</button>
+            <button class="chip" data-cat="culture">🎭 Culture</button>
+          </div>
+        </div>
+        <div id="feedList" class="cards"></div>
+        <div id="feedEmpty" class="empty" hidden>
+          <p>😴 Quiet around here right now.</p>
+          <button class="btn ghost" id="feedShowAll">Show everything nearby</button>
+        </div>
+      </section>
+
+      <!-- RADAR -->
+      <section id="view-radar" class="view">
+        <div class="radar-wrap"><canvas id="radar" aria-label="Radar of nearby spots"></canvas></div>
+        <p class="radar-hint">Tap a blip for details · pink rings are friends discovering things live ·
+          works with <b>zero</b> signal</p>
+        <div class="legend">
+          <span style="--c:#ff7a59">🍜 Food</span>
+          <span style="--c:#c084fc">🎉 Events</span>
+          <span style="--c:#38bdf8">🎢 Fun</span>
+          <span style="--c:#4ade80">🌴 Chill</span>
+          <span style="--c:#facc15">🎭 Culture</span>
+        </div>
+      </section>
+
+      <!-- LIVE -->
+      <section id="view-live" class="view">
+        <div id="liveBanner" class="banner online"></div>
+        <div class="friends-row" id="friendsRow"></div>
+        <div id="liveFeed" class="activity"></div>
+      </section>
+
+      <!-- SAVED -->
+      <section id="view-saved" class="view">
+        <div id="savedList" class="cards"></div>
+        <div id="savedEmpty" class="empty">
+          <p>🗺 Nothing saved yet.<br>Tap the ♡ on any spot — saves work offline and never get lost.</p>
+        </div>
+      </section>
+    </main>
+
+    <button id="fab" class="fab" title="Drop a find — tell friends about this place">＋</button>
+
+    <nav class="tabbar">
+      <button data-view="now" class="active"><span>⏱</span>Now</button>
+      <button data-view="radar"><span>◎</span>Radar</button>
+      <button data-view="live"><span>⚡<i id="liveDot" class="notif" hidden></i></span>Live</button>
+      <button data-view="saved"><span>♥</span>Saved</button>
+    </nav>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <!-- Modals -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden></div>
+
+  <div class="modal" id="onboardModal" role="dialog" aria-modal="true" hidden>
+    <div class="ob-logo"><span class="logo big"></span></div>
+    <h2>Welcome to Pulse</h2>
+    <p class="muted center">Cool stuff around you, right now.<br>
+      Works offline · live with friends · <b>no account needed</b>.</p>
+    <label class="lbl" for="obName">What should friends call you?</label>
+    <input id="obName" class="input" maxlength="20" placeholder="e.g. Nabeel" autocomplete="off">
+    <div class="emoji-grid" id="obEmojis"></div>
+    <button class="btn primary wide" id="obStart">Start exploring →</button>
+    <p class="tiny muted center">No email. No password. Your profile lives on this device —
+      take it anywhere with a Sync Code.</p>
+  </div>
+
+  <div class="modal sheet" id="spotModal" role="dialog" aria-modal="true" hidden></div>
+
+  <div class="modal" id="profileModal" role="dialog" aria-modal="true" hidden>
+    <h2>Your profile</h2>
+    <label class="lbl" for="pfName">Name</label>
+    <input id="pfName" class="input" maxlength="20" autocomplete="off">
+    <div class="emoji-grid" id="pfEmojis"></div>
+    <button class="btn primary wide" id="pfSave">Save profile</button>
+    <hr class="sep">
+    <h3>🔑 Sync Code <span class="tiny muted">— your saves, on any device</span></h3>
+    <p class="tiny muted">No accounts, no passwords: copy this code, paste it into Pulse on another
+      device, and your profile + saved spots follow you around.</p>
+    <button class="btn ghost wide" id="syncCopy">Copy my Sync Code</button>
+    <textarea id="syncOut" class="input mono" rows="2" readonly placeholder="Your code appears here"></textarea>
+    <label class="lbl" for="syncIn">Have a code from another device?</label>
+    <textarea id="syncIn" class="input mono" rows="2" placeholder="Paste PULSE1.… here"></textarea>
+    <button class="btn ghost wide" id="syncGo">Import & merge</button>
+  </div>
+
+  <div class="modal" id="dropModal" role="dialog" aria-modal="true" hidden>
+    <h2>📌 Drop a find</h2>
+    <p class="tiny muted">Found something cool? Pin it at your location — friends nearby get pinged
+      instantly when they're online.</p>
+    <label class="lbl" for="dropName">What did you find?</label>
+    <input id="dropName" class="input" maxlength="40" placeholder="e.g. Secret shawarma cart" autocomplete="off">
+    <label class="lbl" for="dropCat">Category</label>
+    <select id="dropCat" class="input">
+      <option value="food">🍜 Food</option>
+      <option value="event">🎉 Event</option>
+      <option value="fun">🎢 Fun</option>
+      <option value="chill">🌴 Chill</option>
+      <option value="culture">🎭 Culture</option>
+    </select>
+    <button class="btn primary wide" id="dropGo">Drop it 📍</button>
+  </div>
+
+  <div class="modal" id="locModal" role="dialog" aria-modal="true" hidden>
+    <h2>Where are you?</h2>
+    <p class="tiny muted">Presets keep demos deterministic; “My location” uses real GPS
+      (and falls back to your last fix when offline).</p>
+    <div id="locList" class="loc-list"></div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/radar.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

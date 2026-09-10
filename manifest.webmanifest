@@ -1,0 +1,12 @@
+{
+  "name": "Pulse — Nearby, Right Now",
+  "short_name": "Pulse",
+  "description": "Cool stuff happening around you, right now. Works offline, lights up with friends when you're connected.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
