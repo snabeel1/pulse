@@ -3,7 +3,7 @@
    instantly with airplane mode on. Relative paths keep it working under a
    GitHub Pages project path. */
 
-const CACHE = 'pulse-v3';
+const CACHE = 'pulse-v5';
 const SHELL = [
   './',
   './index.html',
@@ -17,6 +17,9 @@ const SHELL = [
   './manifest.webmanifest',
   './icons/icon.svg',
 ];
+// Landmark photos are 4K (~35 MB total), so they are NOT precached — the
+// runtime cache below stores each one the first time it scrolls into view,
+// and the generated SVG art underneath covers anything unseen offline.
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -47,7 +50,13 @@ self.addEventListener('fetch', (e) => {
           caches.open(CACHE).then((c) => c.put(e.request, copy));
         }
         return res;
-      }).catch(() => caches.match('./index.html'))
+      }).catch(() => {
+        // Offline fallback only for our own pages — a failed cross-origin
+        // API call (e.g. map search) must fail, not masquerade as HTML.
+        if (e.request.mode === 'navigate' || new URL(e.request.url).origin === location.origin)
+          return caches.match('./index.html');
+        return Response.error();
+      })
     )
   );
 });

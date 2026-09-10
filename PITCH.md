@@ -1,3 +1,28 @@
+# Pulse — pitch material
+
+## The 60-second feature pitch
+
+> "Pulse answers one question: **what's good around me, right now?**
+>
+> Open it — no signup, no password, you just pick a name. The feed ranks what's
+> *actually happening*: live events first, then what's open, weighted by distance —
+> with real 4K photos of the real places, and covers our own code draws for the rest.
+>
+> **Search anywhere** — type 'Hatta', type 'Deira', type any place on the planet —
+> Pulse teleports you there and shows distinct events going on in that exact spot.
+>
+> It's **social**: your circle of friends lives in the app — added by swapping Friend
+> Codes, no phone numbers — their discoveries ping your radar live, and you can
+> **text them** right here. Go through a dead zone? Messages queue and send
+> themselves when you're back.
+>
+> And that's the headline: **flip it to airplane mode and everything still works** —
+> the feed, the radar, your saves, your chat history. Offline-first core, live layer
+> on top, identity without accounts. Every contradiction in the brief became a feature.
+> That's Pulse."
+
+---
+
 # Pulse — 3-minute demo script
 
 > Goal: hit all five judging criteria — Interpretation, Functionality, Technical execution,

@@ -43,6 +43,11 @@
           <h1 id="helloTitle">Hey 👋</h1>
           <p id="helloSub">Here's what's alive around you right now.</p>
         </div>
+        <div class="search-wrap">
+          <input id="searchInput" class="input search-input" type="search"
+            placeholder="🔎 Search anywhere — Deira, JBR, Hatta…" autocomplete="off" spellcheck="false">
+          <div id="searchResults" class="search-results" hidden></div>
+        </div>
         <div class="filters">
           <button class="chip toggle active" id="nowToggle">⏱ Happening now</button>
           <div class="cats" id="catChips">
@@ -158,6 +163,22 @@
       <option value="culture">🎭 Culture</option>
     </select>
     <button class="btn primary wide" id="dropGo">Drop it 📍</button>
+  </div>
+
+  <div class="modal chat" id="chatModal" role="dialog" aria-modal="true" hidden>
+    <div class="chat-head">
+      <button class="chat-back" id="chatBack" aria-label="Close chat">←</button>
+      <span class="f-avatar" id="chatAvatar">🙂</span>
+      <div class="friend-info">
+        <b id="chatName">Friend</b>
+        <span class="muted" id="chatStatus">Active now</span>
+      </div>
+    </div>
+    <div id="chatMsgs" class="chat-msgs"></div>
+    <div class="chat-inputrow">
+      <input id="chatInput" class="input" placeholder="Message…" maxlength="500" autocomplete="off">
+      <button class="btn primary" id="chatSend">➤</button>
+    </div>
   </div>
 
   <div class="modal" id="friendModal" role="dialog" aria-modal="true" hidden>

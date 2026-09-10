@@ -13,6 +13,10 @@ const Store = (() => {
     custom: [],               // user-dropped finds (full spot objects)
     feed: [],                 // cached live-activity feed (works as history offline)
     feedTs: null,             // when the feed last updated
+    chats: {},                // { friendId: [{id, from:'me'|'them', text, ts, pending?}] }
+    unread: {},               // { friendId: count }
+    outbox: [],               // chat messages queued while offline
+    lastSearch: null,         // last searched location { lat, lng, label }
     manualOffline: false,     // presenter's "simulate offline" switch
     theme: 'auto',            // 'auto' | 'light' | 'dark'
     locId: 'diac',
@@ -108,6 +112,23 @@ const Store = (() => {
     save();
   }
 
+  /* ——— Chats (persist offline, like everything else) ——— */
+  function chatWith(friendId) {
+    if (!state.chats[friendId]) state.chats[friendId] = [];
+    return state.chats[friendId];
+  }
+  function pushMsg(friendId, msg) {
+    const thread = chatWith(friendId);
+    if (thread.some((m) => m.id === msg.id)) return false; // de-dupe across devices
+    thread.push(msg);
+    if (thread.length > 200) thread.splice(0, thread.length - 200);
+    save();
+    return true;
+  }
+  function markRead(friendId) { state.unread[friendId] = 0; save(); }
+  function bumpUnread(friendId) { state.unread[friendId] = (state.unread[friendId] || 0) + 1; save(); }
+  const unreadTotal = () => Object.values(state.unread).reduce((a, b) => a + b, 0);
+
   /* ——— Sync Code: the whole "account" in your pocket ———
      Encodes profile + saves + dropped finds as a compact base64 token.
      Paste it on any device to carry your stuff with you. No password,
@@ -140,6 +161,7 @@ const Store = (() => {
     load, save,
     get state() { return state; },
     toggleSaved, isSaved, addCustom, pushFeed,
+    chatWith, pushMsg, markRead, bumpUnread, unreadTotal,
     exportCode, importCode,
     ensureFriends, ensureProfileId, addFriend, removeFriend, isFriend,
     exportFriendCode, importFriendCode,

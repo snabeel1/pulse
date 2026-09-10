@@ -6,6 +6,7 @@ const App = (() => {
   const $$ = (s) => [...document.querySelectorAll(s)];
 
   let demoEvents = [];
+  let localPopups = [];                 // distinct events seeded around the current location
   let loc = null;                       // { lat, lng, label }
   let filter = 'all';
   let nowOnly = true;
@@ -113,7 +114,7 @@ const App = (() => {
   };
 
   /* ——— Data ——— */
-  const getSpots = () => [...SPOTS, ...demoEvents, ...Store.state.custom];
+  const getSpots = () => [...SPOTS, ...demoEvents, ...localPopups, ...Store.state.custom];
   const findSpot = (id) => getSpots().find((s) => s.id === id);
 
   function recomputeGeo() {
@@ -149,6 +150,7 @@ const App = (() => {
       <article class="card" data-id="${spot.id}">
         <div class="cover">
           ${Covers.coverSVG(spot)}
+          ${spot.img ? `<img class="cover-img" src="${spot.img}" alt="" loading="lazy" onerror="this.remove()">` : ''}
           <span class="cover-chip">${cat.emoji} ${cat.label}</span>
           ${st.cls === 'live' ? '<span class="cover-live">⚡ LIVE</span>' : ''}
           <button class="heart cover-heart ${g.saved ? 'on' : ''}" data-save="${spot.id}"
@@ -222,15 +224,23 @@ const App = (() => {
     const friends = Store.ensureFriends();
     $('#friendCount').textContent = friends.length;
     $('#friendList').innerHTML = friends.length
-      ? friends.map((f) => `
-        <div class="friend-row">
+      ? friends.map((f) => {
+        const last = Store.chatWith(f.id).slice(-1)[0];
+        const unread = Store.state.unread[f.id] || 0;
+        const sub = last
+          ? `${last.from === 'me' ? 'You: ' : ''}${last.text.length > 34 ? last.text.slice(0, 34) + '…' : last.text}`
+          : (online ? 'Active now — tap to chat 💬' : 'Offline') + (f.seed ? ' · demo friend' : '');
+        return `
+        <div class="friend-row" data-chat="${f.id}" role="button" tabindex="0">
           <span class="f-avatar ${online ? 'on' : ''}">${f.emoji}</span>
           <div class="friend-info">
             <b>${esc(f.name)}</b>
-            <span class="muted">${online ? 'Active now' : 'Offline'}${f.seed ? ' · demo friend' : ''}</span>
+            <span class="muted">${esc(sub)}</span>
           </div>
+          ${unread ? `<span class="unread-pill">${unread}</span>` : ''}
           <button class="friend-x" data-unfriend="${f.id}" aria-label="Remove ${esc(f.name)}">✕</button>
-        </div>`).join('')
+        </div>`;
+      }).join('')
       : '<p class="empty-line">No friends yet — swap Friend Codes to build your circle.</p>';
     const feed = Store.state.feed.filter(visibleActivity);
     $('#liveFeed').innerHTML = feed.length
@@ -242,6 +252,77 @@ const App = (() => {
     $('#myFriendCode').value = Store.exportFriendCode();
     $('#friendCodeIn').value = '';
     openModal('friendModal');
+  }
+
+  /* ——— Texting ——— */
+  let currentChat = null;
+  const typingNow = {};
+
+  function openChat(friendId) {
+    const f = Store.ensureFriends().find((x) => x.id === friendId);
+    if (!f) return;
+    currentChat = friendId;
+    $('#chatAvatar').textContent = f.emoji;
+    $('#chatName').textContent = f.name;
+    $('#chatStatus').textContent = Live.isOnline()
+      ? 'Active now' : 'Offline — messages will queue';
+    Store.markRead(friendId);
+    openModal('chatModal');
+    renderChat();
+    updateUnreadUI();
+    $('#chatInput').focus();
+  }
+
+  function renderChat() {
+    if (!currentChat) return;
+    const f = Store.ensureFriends().find((x) => x.id === currentChat);
+    const thread = Store.chatWith(currentChat);
+    const msgs = thread.length
+      ? thread.map((m) => `
+        <div class="msg ${m.from === 'me' ? 'me' : 'them'}">
+          <div class="bubble">${esc(m.text)}</div>
+          <span class="msg-ts">${fmtAgo(m.ts)}${m.pending ? ' · ⏳ queued' : ''}</span>
+        </div>`).join('')
+      : `<p class="empty-line">Say salam to ${esc(f?.name || 'your friend')} 👋${f?.seed ? '<br>(demo friend — they text back)' : ''}</p>`;
+    $('#chatMsgs').innerHTML = msgs +
+      (typingNow[currentChat] ? '<div class="msg them"><div class="bubble typing"><i></i><i></i><i></i></div></div>' : '');
+    const box = $('#chatMsgs');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function sendCurrentChat() {
+    const inp = $('#chatInput');
+    const text = inp.value.trim();
+    if (!text || !currentChat) return;
+    inp.value = '';
+    const local = Live.sendChat(currentChat, text);
+    renderChat();
+    if (local.pending) toast('📡 Offline — queued, sends the moment you reconnect');
+  }
+
+  function updateUnreadUI() {
+    if (Store.unreadTotal() > 0 && view !== 'friends') $('#liveDot').hidden = false;
+  }
+
+  function onChat(e) {
+    if (e.incoming) {
+      const chatOpen = currentChat === e.friendId && !$('#chatModal').hidden;
+      if (chatOpen) { Store.markRead(e.friendId); renderChat(); }
+      else {
+        Store.bumpUnread(e.friendId);
+        toast(`💬 ${e.emoji} ${e.name}: ${e.text.length > 44 ? e.text.slice(0, 44) + '…' : e.text}`);
+      }
+    } else {
+      if (e.friendId && currentChat === e.friendId && !$('#chatModal').hidden) renderChat();
+      if (e.flushed) toast(`📨 Sent ${e.flushed} queued message${e.flushed > 1 ? 's' : ''}`);
+    }
+    if (view === 'friends') renderFriends();
+    updateUnreadUI();
+  }
+
+  function onTyping({ friendId, on }) {
+    typingNow[friendId] = on;
+    if (currentChat === friendId && !$('#chatModal').hidden) renderChat();
   }
 
   /* ——— Spot detail ——— */
@@ -256,6 +337,7 @@ const App = (() => {
       <div class="sheet-grab"></div>
       <div class="cover sheet-cover">
         ${Covers.coverSVG(spot)}
+        ${spot.img ? `<img class="cover-img" src="${spot.img}" alt="" onerror="this.remove()">` : ''}
         <span class="cover-chip">${cat.emoji} ${cat.label}</span>
         ${st.cls === 'live' ? '<span class="cover-live">⚡ LIVE</span>' : ''}
       </div>
@@ -351,8 +433,85 @@ const App = (() => {
     }
   }
   function locUpdated() {
+    // Distinct happenings wherever you land (DIAC keeps its curated demo events).
+    localPopups = (loc && Store.state.locId !== 'diac')
+      ? makeLocalPopups(loc.label, loc.lat, loc.lng, new Date()) : [];
     $('#locChip').textContent = `📍 ${loc.label}`;
     renderFeed(); renderSaved();
+  }
+
+  function teleportTo(lat, lng, label) {
+    Store.state.locId = 'search';
+    Store.state.lastSearch = { lat, lng, label };
+    Store.save();
+    loc = { lat, lng, label };
+    locUpdated();
+    toast(`🛬 ${label} — here's what's going on there`);
+  }
+
+  /* ——— Location search: instant local matches + live map geocoding ——— */
+  let searchTimer = null, searchAbort = null;
+
+  async function runSearch(q) {
+    const box = $('#searchResults'), inp = $('#searchInput');
+    const ql = q.toLowerCase();
+    const areaMap = new Map();
+    for (const s of getSpots()) if (s.area && !s.demo && !areaMap.has(s.area)) areaMap.set(s.area, s);
+    const areas = [...areaMap.entries()].filter(([a]) => a.toLowerCase().includes(ql)).slice(0, 3);
+    const spots = getSpots().filter((s) => s.name.toLowerCase().includes(ql)).slice(0, 3);
+    let html = '';
+    for (const [a, s] of areas)
+      html += `<button class="sr" data-go="loc" data-lat="${s.lat}" data-lng="${s.lng}" data-label="${esc(a)}">📍 <b>${esc(a)}</b> <span class="muted">area</span></button>`;
+    for (const s of spots)
+      html += `<button class="sr" data-go="spot" data-id="${s.id}">${s.emoji} <b>${esc(s.name)}</b> <span class="muted">${esc(s.area || '')}</span></button>`;
+    box.innerHTML = html;
+    box.hidden = false;
+
+    if (!Live.isOnline()) {
+      box.insertAdjacentHTML('beforeend',
+        `<div class="sr-note">📡 Offline — showing known places only. Reconnect to search the whole map.</div>`);
+      return;
+    }
+    box.insertAdjacentHTML('beforeend', `<div class="sr-note" id="srLoading">🌍 Searching the map…</div>`);
+    try {
+      if (searchAbort) searchAbort.abort();
+      searchAbort = new AbortController();
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=4&q=${encodeURIComponent(q)}`,
+        { signal: searchAbort.signal, headers: { Accept: 'application/json' } });
+      const data = await res.json();
+      document.getElementById('srLoading')?.remove();
+      if (inp.value.trim() !== q) return; // user kept typing — stale results
+      for (const r of (Array.isArray(data) ? data : [])) {
+        const label = r.display_name.split(',').slice(0, 2).map((s) => s.trim()).join(', ');
+        box.insertAdjacentHTML('beforeend',
+          `<button class="sr" data-go="loc" data-lat="${r.lat}" data-lng="${r.lon}" data-label="${esc(label)}">🌍 <b>${esc(label)}</b> <span class="muted">${esc(r.type || 'place')}</span></button>`);
+      }
+      if (!box.querySelector('.sr'))
+        box.innerHTML = '<div class="sr-note">Nothing found — try a landmark, area, or city name.</div>';
+    } catch (e) { document.getElementById('srLoading')?.remove(); }
+  }
+
+  function bindSearch() {
+    const inp = $('#searchInput'), box = $('#searchResults');
+    inp.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = inp.value.trim();
+      if (!q) { box.hidden = true; box.innerHTML = ''; return; }
+      searchTimer = setTimeout(() => runSearch(q), 320);
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { const first = box.querySelector('.sr'); if (first) first.click(); }
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search-wrap')) box.hidden = true;
+    });
+    box.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-go]'); if (!el) return;
+      box.hidden = true; inp.value = '';
+      if (el.dataset.go === 'spot') { renderFeed(); openSpot(el.dataset.id); }
+      else teleportTo(+el.dataset.lat, +el.dataset.lng, el.dataset.label);
+    });
   }
 
   /* ——— Modals / toasts ——— */
@@ -442,12 +601,15 @@ const App = (() => {
       if (save) { e.stopPropagation(); toggleSave(save.dataset.save); return; }
       const unfriend = e.target.closest('[data-unfriend]');
       if (unfriend) {
+        e.stopPropagation();
         const f = Store.ensureFriends().find((x) => x.id === unfriend.dataset.unfriend);
         Store.removeFriend(unfriend.dataset.unfriend);
         toast(`👋 ${f ? f.name : 'Friend'} removed — their updates won't show anymore`);
         renderFriends();
         return;
       }
+      const chatRow = e.target.closest('[data-chat]');
+      if (chatRow) return openChat(chatRow.dataset.chat);
       const card = e.target.closest('.card[data-id]');
       if (card) return openSpot(card.dataset.id);
       const act = e.target.closest('.act[data-id]');
@@ -505,6 +667,9 @@ const App = (() => {
         renderFriends();
       } catch (err) { toast('⚠️ ' + err.message); }
     });
+    $('#chatSend').addEventListener('click', sendCurrentChat);
+    $('#chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendCurrentChat(); });
+    $('#chatBack').addEventListener('click', closeModals);
     $('#fab').addEventListener('click', openDrop);
     $('#dropGo').addEventListener('click', submitDrop);
     $('#dropName').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitDrop(); });
@@ -555,18 +720,23 @@ const App = (() => {
     Theme.apply();
 
     const saved = LOCATIONS.find((l) => l.id === Store.state.locId);
-    if (Store.state.locId === 'me' && Store.state.myLoc) {
+    if (Store.state.locId === 'search' && Store.state.lastSearch) {
+      loc = { ...Store.state.lastSearch };
+    } else if (Store.state.locId === 'me' && Store.state.myLoc) {
       loc = { ...Store.state.myLoc, label: 'My location' };
     } else {
       const p = (saved && saved.lat != null) ? saved : LOCATIONS[0];
       loc = { lat: p.lat, lng: p.lng, label: p.label };
     }
     locUpdated();
+    bindSearch();
 
     Radar.init($('#radar'), radarData, openSpot);
     Live.init();
     Live.on('activity', onActivity);
     Live.on('net', onNet);
+    Live.on('chat', onChat);
+    Live.on('typing', onTyping);
     Live.netChanged(); // paint the initial pill state (first paint skips the toast)
 
     refreshProfileBtn();

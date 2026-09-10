@@ -110,6 +110,29 @@ const SPOTS = [
   { id: 's26', name: 'Time Out Market DIFC', cat: 'food', emoji: '🍱', lat: 25.2119, lng: 55.2836,
     area: 'DIFC', price: '~AED 60', scene: 'downtown', tone: 'day',
     hours: [12, 24], vibe: 'Seventeen of the city’s best kitchens under one roof.' },
+
+  // ——— wider city, so any search lands somewhere lively ———
+  { id: 's27', name: 'Marasi Promenade', cat: 'chill', emoji: '🚤', lat: 25.1857, lng: 55.2665,
+    area: 'Business Bay', price: 'Free', scene: 'downtown', tone: 'dusk',
+    hours: [6, 24], vibe: 'Canal boardwalk with floating villas and skyline views.' },
+  { id: 's28', name: 'Ain Dubai Plaza', cat: 'fun', emoji: '🎡', lat: 25.0789, lng: 55.1224,
+    area: 'Bluewaters', price: '~AED 90', scene: 'rides', tone: 'dusk',
+    hours: [11, 24], event: { title: 'Light Show', start: 20, end: 20.5 },
+    vibe: 'The world’s tallest wheel, glowing over the water.' },
+  { id: 's29', name: 'The Pointe Fountain', cat: 'event', emoji: '🌴', lat: 25.1109, lng: 55.1443,
+    area: 'Palm Jumeirah', price: 'Free', scene: 'coast', tone: 'night',
+    hours: [10, 24], event: { title: 'Palm Fountain Show', start: 19, end: 23 },
+    vibe: 'Atlantis views and the world’s largest fountain across the bay.' },
+  { id: 's30', name: 'Karama Food Crawl', cat: 'food', emoji: '🥘', lat: 25.2489, lng: 55.3033,
+    area: 'Al Karama', price: '~AED 20', scene: 'oldtown', tone: 'night',
+    hours: [8, 1], vibe: 'Dosa, chaat, and murals down every side street.' },
+  { id: 's31', name: 'Expo City Al Wasl Dome', cat: 'culture', emoji: '🔮', lat: 24.9614, lng: 55.1520,
+    area: 'Expo City', price: '~AED 40', scene: 'downtown', tone: 'night',
+    hours: [10, 22], event: { title: 'Dome Projection Show', start: 19.5, end: 21 },
+    vibe: 'A 360° projection dome you have to stand under once.' },
+  { id: 's32', name: 'JLT Park Nights', cat: 'chill', emoji: '🧘', lat: 25.0693, lng: 55.1420,
+    area: 'JLT', price: 'Free', scene: 'marina', tone: 'dusk',
+    hours: [6, 24], vibe: 'Lakeside lawns between the towers — quiet, somehow.' },
 ];
 
 /* Demo pop-up events: seeded relative to load time so the "happening right now" feed
@@ -132,6 +155,61 @@ function makeDemoEvents(now) {
       hours: [0, 24], event: { title: 'Student Print Sale', start: wrap(h - 0.25), end: wrap(h + 2) },
       vibe: 'Design students selling prints for the price of a coffee.', demo: true },
   ];
+}
+
+/* Real landmark photos (Wikipedia lead images, fetched at build time and
+   served locally — offline still works; see IMAGE_CREDITS.md). Fictional
+   spots keep their generated SVG cover art, which also renders beneath every
+   photo as the loading/offline fallback. */
+const SPOT_IMAGES = {
+  s08: 'img/s08.jpg', s09: 'img/s09.jpg', s10: 'img/s10.jpg', s11: 'img/s11.jpg',
+  s12: 'img/s12.jpg', s15: 'img/s15.jpg', s16: 'img/s16.jpg', s18: 'img/s18.jpg',
+  s19: 'img/s19.jpg', s21: 'img/s21.jpg', s22: 'img/s22.jpg', s23: 'img/s23.jpg',
+  s24: 'img/s24.jpg', s27: 'img/s27.jpg', s28: 'img/s28.jpg', s29: 'img/s29.jpg',
+  s30: 'img/s30.jpg', s32: 'img/s32.jpg',
+};
+for (const s of SPOTS) if (SPOT_IMAGES[s.id]) s.img = SPOT_IMAGES[s.id];
+
+/* Distinct pop-up events for a searched location: wherever you land, Pulse
+   seeds a handful of happenings around that exact point, deterministic per
+   place name (searching "Hatta" twice shows the same events). Labeled demo —
+   production swaps this for a real events API keyed by geohash. */
+const POPUP_TEMPLATES = [
+  { name: '{p} Night Market', cat: 'event', emoji: '🏮', price: 'Free', tone: 'night', scene: 'oldtown',
+    vibe: 'Lantern stalls, street snacks, and someone playing an oud.', evt: 'Night Market', dur: 4 },
+  { name: 'Street Food Rally', cat: 'food', emoji: '🌮', price: '~AED 15', tone: 'dusk', scene: 'rides',
+    vibe: 'Rotating food trucks parked up near {p} tonight.', evt: 'Food Truck Rally', dur: 5 },
+  { name: '{p} Art Walk', cat: 'culture', emoji: '🖼️', price: 'Free', tone: 'day', scene: 'oldtown',
+    vibe: 'Local artists hanging work along the walkways of {p}.', evt: 'Open-Air Gallery', dur: 6 },
+  { name: 'Rooftop Cinema', cat: 'event', emoji: '🎬', price: '~AED 45', tone: 'night', scene: 'downtown',
+    vibe: 'Deck chairs and a classic under the stars near {p}.', evt: 'Tonight’s Screening', dur: 2.5 },
+  { name: 'Majlis Coffee Circle', cat: 'chill', emoji: '☕', price: '~AED 10', tone: 'dawn', scene: 'park',
+    vibe: 'Gahwa, dates, and slow conversation — {p} style.', evt: 'Morning Majlis', dur: 3 },
+  { name: 'Five-a-Side Pickup', cat: 'fun', emoji: '⚽', price: 'Free', tone: 'dusk', scene: 'park',
+    vibe: 'Open game near {p} — bring water, claim a bib.', evt: 'Pickup Football', dur: 2 },
+  { name: 'Drone Light Show', cat: 'event', emoji: '🛸', price: 'Free', tone: 'night', scene: 'marina',
+    vibe: '300 drones sketching shapes over {p} after dark.', evt: 'Drone Show', dur: 1 },
+  { name: 'Sunset Run Club', cat: 'fun', emoji: '🏃', price: 'Free', tone: 'dusk', scene: 'coast',
+    vibe: '5K loop starting by {p} — all paces welcome.', evt: 'Golden Hour 5K', dur: 1.5 },
+];
+
+function makeLocalPopups(label, lat, lng, now) {
+  let h = 5381;
+  for (const ch of label.toLowerCase()) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0;
+  const rand = () => { h = (Math.imul(h, 1597334677) + 12345) >>> 0; return h / 4294967296; };
+  const nowH = now.getHours() + now.getMinutes() / 60;
+  const wrap = (x) => ((x % 24) + 24) % 24;
+  const picks = [...POPUP_TEMPLATES].sort(() => rand() - 0.5).slice(0, 3);
+  return picks.map((t, i) => {
+    const start = wrap(nowH + (i === 0 ? -0.5 : i * 1.25)); // one live now, others soon
+    return {
+      id: 'p' + (h + i), name: t.name.replace('{p}', label), cat: t.cat, emoji: t.emoji,
+      lat: lat + (rand() - 0.5) * 0.02, lng: lng + (rand() - 0.5) * 0.02,
+      area: label, price: t.price, scene: t.scene, tone: t.tone,
+      hours: [0, 24], event: { title: t.evt, start, end: wrap(start + t.dur) },
+      vibe: t.vibe.replace('{p}', label), demo: true,
+    };
+  });
 }
 
 /* Preset locations for the demo — geolocation is available but a presentation room

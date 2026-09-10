@@ -12,7 +12,7 @@ const Live = (() => {
   const clientId = 'c' + Math.random().toString(36).slice(2); // per-tab, so same profile in 2 tabs still syncs
   let channel = null;
   let simTimer = null;
-  let handlers = { activity: [], net: [] };
+  let handlers = { activity: [], net: [], chat: [], typing: [] };
 
   const on = (ev, fn) => handlers[ev].push(fn);
   const emit = (ev, data) => handlers[ev].forEach((fn) => fn(data));
@@ -23,15 +23,19 @@ const Live = (() => {
     if ('BroadcastChannel' in window) {
       channel = new BroadcastChannel('pulse-live-v1');
       channel.onmessage = (msg) => {
-        const { t, a, from } = msg.data || {};
-        if (t !== 'activity' || from === clientId) return;
+        const { t, a, m, from } = msg.data || {};
+        if (from === clientId) return;
         if (!isOnline()) return; // offline means offline — even cross-tab
-        // Friends-only feed: ignore strangers. Your own profile id on another
-        // device still gets through (that's you, elsewhere).
         const myId = Store.state.profile?.id;
-        if (a.who?.id !== myId && !Store.isFriend(a.who?.id)) return;
-        if (a.who?.id === myId) a.elsewhere = true;
-        receive(a);
+        if (t === 'activity' && a) {
+          // Friends-only feed: ignore strangers. Your own profile id on another
+          // device still gets through (that's you, elsewhere).
+          if (a.who?.id !== myId && !Store.isFriend(a.who?.id)) return;
+          if (a.who?.id === myId) a.elsewhere = true;
+          receive(a);
+        } else if (t === 'chat' && m) {
+          receiveChat(m);
+        }
       };
     }
     window.addEventListener('online', netChanged);
@@ -41,7 +45,7 @@ const Live = (() => {
 
   function netChanged() {
     emit('net', isOnline());
-    if (isOnline()) scheduleSim(3000); else stopSim();
+    if (isOnline()) { scheduleSim(3000); flushOutbox(); } else stopSim();
   }
 
   function setManualOffline(v) {
@@ -73,6 +77,88 @@ const Live = (() => {
     }
   }
 
+  /* ——— Chat: same broadcast bus, plus an offline outbox ———
+     Messages queue while offline and flush the moment you reconnect —
+     texting "just works" through dead spots. Seeded demo friends reply
+     with a typing indicator, so the room talks back even solo. */
+  const REPLIES = [
+    'omg yes I was just there 😍', "wait really? I'm 5 min away",
+    'say less, otw 🏃', 'take me next time!!', "that place is SO underrated",
+    'haha classic you', 'send pics or it never happened 📸',
+    'ok adding it to my list', 'meet at {spot}? heard it\'s buzzing rn',
+    'I found something better, check {spot} 👀',
+  ];
+
+  function sendChat(friendId, text) {
+    Store.ensureProfileId();
+    const me = Store.state.profile;
+    const msg = {
+      id: 'm' + Date.now() + Math.random().toString(36).slice(2, 6),
+      fromId: me.id, fromName: me.name, fromEmoji: me.emoji,
+      toId: friendId, text, ts: Date.now(),
+    };
+    const local = { id: msg.id, from: 'me', text, ts: msg.ts };
+    if (!isOnline()) {
+      local.pending = true;
+      Store.state.outbox.push(msg);
+    }
+    Store.pushMsg(friendId, local);
+    Store.save();
+    if (isOnline()) deliver(msg);
+    return local;
+  }
+
+  function deliver(msg) {
+    if (channel) channel.postMessage({ t: 'chat', from: clientId, m: msg });
+    const friend = Store.ensureFriends().find((f) => f.id === msg.toId);
+    if (friend?.seed) scheduleReply(friend);
+  }
+
+  function flushOutbox() {
+    const queued = Store.state.outbox.splice(0);
+    if (!queued.length) return;
+    for (const msg of queued) {
+      const thread = Store.chatWith(msg.toId);
+      const local = thread.find((m) => m.id === msg.id);
+      if (local) delete local.pending;
+      deliver(msg);
+    }
+    Store.save();
+    emit('chat', { flushed: queued.length });
+  }
+
+  function receiveChat(m) {
+    const myId = Store.state.profile?.id;
+    if (m.fromId === myId) {
+      // me, on another device — converge the thread
+      if (Store.pushMsg(m.toId, { id: m.id, from: 'me', text: m.text, ts: m.ts }))
+        emit('chat', { friendId: m.toId });
+      return;
+    }
+    if (m.toId !== myId || !Store.isFriend(m.fromId)) return;
+    if (Store.pushMsg(m.fromId, { id: m.id, from: 'them', text: m.text, ts: m.ts })) {
+      emit('chat', { friendId: m.fromId, incoming: true, name: m.fromName, emoji: m.fromEmoji, text: m.text });
+    }
+  }
+
+  function scheduleReply(friend) {
+    setTimeout(() => {
+      if (!isOnline() || !Store.isFriend(friend.id)) return;
+      emit('typing', { friendId: friend.id, on: true });
+      setTimeout(() => {
+        emit('typing', { friendId: friend.id, on: false });
+        if (!isOnline() || !Store.isFriend(friend.id)) return;
+        const pool = (window.App && App.getSpots()) || SPOTS;
+        const spot = pool[Math.floor(Math.random() * pool.length)];
+        const text = REPLIES[Math.floor(Math.random() * REPLIES.length)]
+          .replace('{spot}', `${spot.emoji} ${spot.name}`);
+        const msg = { id: 'm' + Date.now() + Math.random().toString(36).slice(2, 6), from: 'them', text, ts: Date.now() };
+        if (Store.pushMsg(friend.id, msg))
+          emit('chat', { friendId: friend.id, incoming: true, name: friend.name, emoji: friend.emoji, text });
+      }, 1600 + Math.random() * 2600);
+    }, 900 + Math.random() * 1200);
+  }
+
   /* Ambient friend activity — seeded peers so the room feels alive even solo.
      Honest label: production swaps this for real presence over WebSockets. */
   function scheduleSim(delay) {
@@ -100,5 +186,5 @@ const Live = (() => {
     scheduleSim();
   }
 
-  return { init, on, isOnline, setManualOffline, localActivity, netChanged };
+  return { init, on, isOnline, setManualOffline, localActivity, netChanged, sendChat };
 })();
