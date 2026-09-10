@@ -135,7 +135,7 @@ const App = (() => {
     $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
     $('#fab').hidden = !(v === 'now' || v === 'radar');
     if (v === 'radar') { Radar.resize(); Radar.start(); } else Radar.stop();
-    if (v === 'live') { $('#liveDot').hidden = true; renderLive(); }
+    if (v === 'friends') { $('#liveDot').hidden = true; renderFriends(); }
     if (v === 'saved') renderSaved();
     if (v === 'now') renderFeed();
   }
@@ -147,19 +147,21 @@ const App = (() => {
     const cat = CATEGORIES[spot.cat];
     return `
       <article class="card" data-id="${spot.id}">
-        <div class="card-emoji" style="background:${hexA(cat.color, 0.14)}">${spot.emoji}</div>
+        <div class="cover">
+          ${Covers.coverSVG(spot)}
+          <span class="cover-chip">${cat.emoji} ${cat.label}</span>
+          ${st.cls === 'live' ? '<span class="cover-live">⚡ LIVE</span>' : ''}
+          <button class="heart cover-heart ${g.saved ? 'on' : ''}" data-save="${spot.id}"
+            aria-label="${g.saved ? 'Unsave' : 'Save'} ${esc(spot.name)}">${g.saved ? '♥' : '♡'}</button>
+        </div>
         <div class="card-body">
-          <div class="card-top">
-            <h3>${esc(spot.name)}</h3>
-            <button class="heart ${g.saved ? 'on' : ''}" data-save="${spot.id}"
-              aria-label="${g.saved ? 'Unsave' : 'Save'} ${esc(spot.name)}">${g.saved ? '♥' : '♡'}</button>
+          <div class="meta-top">
+            <span class="area">📍 ${esc(spot.area || 'Nearby')} · ${fmtDist(dist)} · ${travelTime(dist)}</span>
+            <span class="price">${esc(spot.price || '')}</span>
           </div>
+          <h3>${esc(spot.name)}</h3>
           <p class="vibe">${esc(spot.vibe)}</p>
-          <div class="meta">
-            <span class="badge ${st.cls}">${st.label}</span>
-            <span class="tag" data-cat="${spot.cat}">${cat.emoji} ${cat.label}</span>
-            <span class="dist">${fmtDist(dist)} · ${travelTime(dist)}</span>
-          </div>
+          <div class="meta"><span class="badge ${st.cls}">${st.label}</span></div>
         </div>
       </article>`;
   }
@@ -183,38 +185,63 @@ const App = (() => {
     $('#savedEmpty').hidden = list.length > 0;
   }
 
-  /* ——— Live feed ——— */
+  /* ——— Friends tab ——— */
   function activityHTML(a) {
     const spot = findSpot(a.spotId);
     const d = spot && loc ? ` · ${fmtDist(distKm(loc, spot))} away` : '';
+    const tagYou = a.mine ? ' (you)' : a.elsewhere ? ' (you · another device)' : '';
     return `
       <div class="act ${a.mine ? 'mine' : ''}" data-id="${a.spotId}">
         <span class="act-avatar">${a.who.emoji}</span>
         <div class="act-body">
-          <p><b>${esc(a.who.name)}${a.mine ? ' (you)' : ''}</b> ${esc(a.verb)}
+          <p><b>${esc(a.who.name)}${tagYou}</b> ${esc(a.verb)}
              <b>${a.spotEmoji || ''} ${esc(a.spotName)}</b><span class="muted">${d}</span></p>
           <span class="act-ts">${fmtAgo(a.ts)}</span>
         </div>
       </div>`;
   }
 
-  function renderLive() {
+  function visibleActivity(a) {
+    // Friends-only feed: yours, your other devices', and current friends'.
+    if (a.mine || a.elsewhere) return true;
+    if (!a.who?.id) return true; // legacy entries from before friend ids
+    return a.who.id === Store.state.profile?.id || Store.isFriend(a.who.id);
+  }
+
+  function renderFriends() {
     const online = Live.isOnline();
     const b = $('#liveBanner');
     if (online) {
       b.className = 'banner online';
-      b.innerHTML = '🟢 Live — friends nearby show up here in real time. <span class="muted">Tip: open this app in a second tab and save a spot there.</span>';
+      b.innerHTML = '🟢 Live — your friends show up here in real time. <span class="muted">Add a real friend by swapping Friend Codes.</span>';
     } else {
       const ts = Store.state.feedTs;
       b.className = 'banner offline';
       b.innerHTML = `📡 You're offline — showing activity cached ${ts ? fmtAgo(ts) : 'earlier'}. Everything else still works.`;
     }
-    $('#friendsRow').innerHTML = Live.FRIENDS.map((f) =>
-      `<div class="friend"><span class="f-avatar ${online ? 'on' : ''}">${f.emoji}</span><span>${f.name}</span></div>`).join('');
-    const feed = Store.state.feed;
+    const friends = Store.ensureFriends();
+    $('#friendCount').textContent = friends.length;
+    $('#friendList').innerHTML = friends.length
+      ? friends.map((f) => `
+        <div class="friend-row">
+          <span class="f-avatar ${online ? 'on' : ''}">${f.emoji}</span>
+          <div class="friend-info">
+            <b>${esc(f.name)}</b>
+            <span class="muted">${online ? 'Active now' : 'Offline'}${f.seed ? ' · demo friend' : ''}</span>
+          </div>
+          <button class="friend-x" data-unfriend="${f.id}" aria-label="Remove ${esc(f.name)}">✕</button>
+        </div>`).join('')
+      : '<p class="empty-line">No friends yet — swap Friend Codes to build your circle.</p>';
+    const feed = Store.state.feed.filter(visibleActivity);
     $('#liveFeed').innerHTML = feed.length
       ? feed.map(activityHTML).join('')
       : '<p class="empty-line">No activity yet — it will pour in once friends start exploring.</p>';
+  }
+
+  function openAddFriend() {
+    $('#myFriendCode').value = Store.exportFriendCode();
+    $('#friendCodeIn').value = '';
+    openModal('friendModal');
   }
 
   /* ——— Spot detail ——— */
@@ -227,8 +254,12 @@ const App = (() => {
     const cat = CATEGORIES[spot.cat];
     $('#spotModal').innerHTML = `
       <div class="sheet-grab"></div>
+      <div class="cover sheet-cover">
+        ${Covers.coverSVG(spot)}
+        <span class="cover-chip">${cat.emoji} ${cat.label}</span>
+        ${st.cls === 'live' ? '<span class="cover-live">⚡ LIVE</span>' : ''}
+      </div>
       <div class="spot-head">
-        <div class="card-emoji big" style="background:${hexA(cat.color, 0.16)}">${spot.emoji}</div>
         <div>
           <h2>${esc(spot.name)}</h2>
           <div class="meta">
@@ -238,7 +269,7 @@ const App = (() => {
         </div>
       </div>
       <p class="vibe">${esc(spot.vibe)}</p>
-      <p class="dist-line">📍 ${fmtDist(g.dist)} from you · ${travelTime(g.dist)}</p>
+      <p class="dist-line">📍 ${esc(spot.area || 'Nearby')} · ${fmtDist(g.dist)} from you · ${travelTime(g.dist)}${spot.price ? ' · ' + esc(spot.price) : ''}</p>
       <div class="row">
         <button class="btn ${g.saved ? 'ghost' : 'primary'}" id="spotSaveBtn">
           ${g.saved ? '♥ Saved — tap to remove' : '♡ Save this spot'}</button>
@@ -265,13 +296,14 @@ const App = (() => {
 
   /* ——— Live events into UI ——— */
   function onActivity(a) {
-    if (!a.mine) {
-      toast(`${a.who.emoji} ${a.who.name} ${a.verb} ${a.spotEmoji || ''} ${a.spotName}`);
+    if (!a.mine && visibleActivity(a)) {
+      const who = a.elsewhere ? `${a.who.name} (another device)` : a.who.name;
+      toast(`${a.who.emoji} ${who} ${a.verb} ${a.spotEmoji || ''} ${a.spotName}`);
       const g = geoCache.find((x) => x.spot.id === a.spotId);
       if (g) Radar.addPing(g.dist, g.bearing);
-      if (view !== 'live') $('#liveDot').hidden = false;
+      if (view !== 'friends') $('#liveDot').hidden = false;
     }
-    if (view === 'live') renderLive();
+    if (view === 'friends') renderFriends();
   }
 
   let netPainted = false;
@@ -282,7 +314,7 @@ const App = (() => {
     pill.title = online
       ? 'Connected — click to simulate going offline'
       : 'Offline — cached data keeps everything working. Click to reconnect.';
-    if (view === 'live') renderLive();
+    if (view === 'friends') renderFriends();
     if (netPainted) {
       toast(online ? '🟢 Back online — live layer resumed' : '📡 Offline mode — everything still works from cache');
     }
@@ -408,6 +440,14 @@ const App = (() => {
     document.addEventListener('click', (e) => {
       const save = e.target.closest('[data-save]');
       if (save) { e.stopPropagation(); toggleSave(save.dataset.save); return; }
+      const unfriend = e.target.closest('[data-unfriend]');
+      if (unfriend) {
+        const f = Store.ensureFriends().find((x) => x.id === unfriend.dataset.unfriend);
+        Store.removeFriend(unfriend.dataset.unfriend);
+        toast(`👋 ${f ? f.name : 'Friend'} removed — their updates won't show anymore`);
+        renderFriends();
+        return;
+      }
       const card = e.target.closest('.card[data-id]');
       if (card) return openSpot(card.dataset.id);
       const act = e.target.closest('.act[data-id]');
@@ -451,6 +491,20 @@ const App = (() => {
 
     $('#themeBtn').addEventListener('click', () => Theme.cycle());
     $('#profileBtn').addEventListener('click', openProfile);
+    $('#addFriendBtn').addEventListener('click', openAddFriend);
+    $('#friendCodeCopy').addEventListener('click', async () => {
+      const code = $('#myFriendCode').value;
+      try { await navigator.clipboard.writeText(code); toast('🤝 Friend Code copied — send it to a friend'); }
+      catch { $('#myFriendCode').select(); toast('🤝 Code ready — copy it from the box'); }
+    });
+    $('#friendCodeAdd').addEventListener('click', () => {
+      try {
+        const f = Store.importFriendCode($('#friendCodeIn').value);
+        closeModals();
+        toast(`🎉 You and ${f.name} ${f.emoji} are now friends`);
+        renderFriends();
+      } catch (err) { toast('⚠️ ' + err.message); }
+    });
     $('#fab').addEventListener('click', openDrop);
     $('#dropGo').addEventListener('click', submitDrop);
     $('#dropName').addEventListener('keydown', (e) => { if (e.key === 'Enter') submitDrop(); });
@@ -458,15 +512,17 @@ const App = (() => {
     $('#obStart').addEventListener('click', () => {
       const name = $('#obName').value.trim() || 'Explorer';
       Store.state.profile = { name, emoji: pickedEmoji };
-      Store.save(); refreshProfileBtn(); closeModals(); renderHello();
+      Store.save(); Store.ensureProfileId();
+      refreshProfileBtn(); closeModals(); renderHello();
       toast(`Welcome, ${name}! No password, no signup — you're in. ✨`);
     });
     $('#obName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#obStart').click(); });
 
     $('#pfSave').addEventListener('click', () => {
       const name = $('#pfName').value.trim() || 'Explorer';
-      Store.state.profile = { name, emoji: pickedEmoji };
-      Store.save(); refreshProfileBtn(); closeModals(); renderHello();
+      Store.state.profile = { ...(Store.state.profile || {}), name, emoji: pickedEmoji };
+      Store.save(); Store.ensureProfileId();
+      refreshProfileBtn(); closeModals(); renderHello();
       toast('Profile updated ✔');
     });
     $('#syncCopy').addEventListener('click', async () => {
@@ -482,6 +538,7 @@ const App = (() => {
         refreshProfileBtn(); closeModals();
         toast('✅ Synced! Your spots followed you here.');
         renderFeed(); renderSaved();
+        if (view === 'friends') renderFriends();
       } catch (err) { toast('⚠️ ' + err.message); }
     });
 
@@ -491,6 +548,8 @@ const App = (() => {
 
   function init() {
     Store.load();
+    Store.ensureFriends();
+    Store.ensureProfileId();
     demoEvents = makeDemoEvents(new Date());
     bind();
     Theme.apply();

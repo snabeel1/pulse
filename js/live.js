@@ -7,13 +7,6 @@
    the app never notices. */
 
 const Live = (() => {
-  const FRIENDS = [
-    { name: 'Ayesha', emoji: '🦊' },
-    { name: 'Zara',   emoji: '🐼' },
-    { name: 'Maya',   emoji: '🦋' },
-    { name: 'Omar',   emoji: '🐯' },
-    { name: 'Lina',   emoji: '🦉' },
-  ];
   const VERBS = ['found', 'is vibing at', 'just saved', 'spotted a deal at', 'is heading to'];
 
   const clientId = 'c' + Math.random().toString(36).slice(2); // per-tab, so same profile in 2 tabs still syncs
@@ -33,6 +26,11 @@ const Live = (() => {
         const { t, a, from } = msg.data || {};
         if (t !== 'activity' || from === clientId) return;
         if (!isOnline()) return; // offline means offline — even cross-tab
+        // Friends-only feed: ignore strangers. Your own profile id on another
+        // device still gets through (that's you, elsewhere).
+        const myId = Store.state.profile?.id;
+        if (a.who?.id !== myId && !Store.isFriend(a.who?.id)) return;
+        if (a.who?.id === myId) a.elsewhere = true;
         receive(a);
       };
     }
@@ -59,10 +57,11 @@ const Live = (() => {
 
   /* Called by the app when THIS user does something shareable. */
   function localActivity(verb, spot) {
+    Store.ensureProfileId();
     const me = Store.state.profile || { name: 'Someone', emoji: '🙂' };
     const a = {
       id: 'a' + Date.now() + Math.random().toString(36).slice(2, 6),
-      who: { name: me.name, emoji: me.emoji },
+      who: { id: me.id, name: me.name, emoji: me.emoji },
       spotId: spot.id, spotName: spot.name, spotEmoji: spot.emoji,
       verb, ts: Date.now(), mine: true,
     };
@@ -84,12 +83,16 @@ const Live = (() => {
 
   function simTick() {
     if (!isOnline()) return;
-    const friend = FRIENDS[Math.floor(Math.random() * FRIENDS.length)];
+    // Ambient activity comes only from the seeded demo friends — remove them
+    // from your friends list and their chatter stops, like real people would.
+    const seeds = Store.ensureFriends().filter((f) => f.seed);
+    if (!seeds.length) return;
+    const friend = seeds[Math.floor(Math.random() * seeds.length)];
     const pool = (window.App && App.getSpots()) || SPOTS;
     const spot = pool[Math.floor(Math.random() * pool.length)];
     receive({
       id: 'a' + Date.now() + Math.random().toString(36).slice(2, 6),
-      who: friend,
+      who: { id: friend.id, name: friend.name, emoji: friend.emoji },
       spotId: spot.id, spotName: spot.name, spotEmoji: spot.emoji,
       verb: VERBS[Math.floor(Math.random() * VERBS.length)],
       ts: Date.now(), mine: false, sim: true,
@@ -97,5 +100,5 @@ const Live = (() => {
     scheduleSim();
   }
 
-  return { init, on, isOnline, setManualOffline, localActivity, FRIENDS, netChanged };
+  return { init, on, isOnline, setManualOffline, localActivity, netChanged };
 })();

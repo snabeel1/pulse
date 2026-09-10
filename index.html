@@ -75,10 +75,15 @@
         </div>
       </section>
 
-      <!-- LIVE -->
-      <section id="view-live" class="view">
+      <!-- FRIENDS -->
+      <section id="view-friends" class="view">
         <div id="liveBanner" class="banner online"></div>
-        <div class="friends-row" id="friendsRow"></div>
+        <div class="friends-head">
+          <h2>Your circle <span class="count-pill" id="friendCount">0</span></h2>
+          <button class="btn ghost small" id="addFriendBtn">＋ Add friend</button>
+        </div>
+        <div id="friendList" class="friend-list"></div>
+        <h2 class="section-h">Live activity</h2>
         <div id="liveFeed" class="activity"></div>
       </section>
 
@@ -96,7 +101,7 @@
     <nav class="tabbar">
       <button data-view="now" class="active"><span>⏱</span>Now</button>
       <button data-view="radar"><span>◎</span>Radar</button>
-      <button data-view="live"><span>⚡<i id="liveDot" class="notif" hidden></i></span>Live</button>
+      <button data-view="friends"><span>🫂<i id="liveDot" class="notif" hidden></i></span>Friends</button>
       <button data-view="saved"><span>♥</span>Saved</button>
     </nav>
   </div>
@@ -155,6 +160,20 @@
     <button class="btn primary wide" id="dropGo">Drop it 📍</button>
   </div>
 
+  <div class="modal" id="friendModal" role="dialog" aria-modal="true" hidden>
+    <h2>🤝 Add a friend</h2>
+    <p class="tiny muted">No accounts, no phone numbers. You each have a Friend Code —
+      swap them (message, QR, shout it across the room) and you're connected.
+      Their finds then reach you live.</p>
+    <label class="lbl" for="myFriendCode">Your Friend Code</label>
+    <textarea id="myFriendCode" class="input mono" rows="2" readonly></textarea>
+    <button class="btn ghost wide" id="friendCodeCopy">Copy my code</button>
+    <hr class="sep">
+    <label class="lbl" for="friendCodeIn">Paste your friend's code</label>
+    <textarea id="friendCodeIn" class="input mono" rows="2" placeholder="PULSEF.…"></textarea>
+    <button class="btn primary wide" id="friendCodeAdd">Add friend</button>
+  </div>
+
   <div class="modal" id="locModal" role="dialog" aria-modal="true" hidden>
     <h2>Where are you?</h2>
     <p class="tiny muted">Presets keep demos deterministic; “My location” uses real GPS
@@ -163,6 +182,7 @@
   </div>
 
   <script src="js/data.js"></script>
+  <script src="js/covers.js"></script>
   <script src="js/store.js"></script>
   <script src="js/live.js"></script>
   <script src="js/radar.js"></script>

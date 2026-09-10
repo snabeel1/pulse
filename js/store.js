@@ -7,7 +7,8 @@ const Store = (() => {
   const KEY = 'pulse.v1';
 
   const defaults = () => ({
-    profile: null,            // { name, emoji } — this IS "being logged in"
+    profile: null,            // { id, name, emoji } — this IS "being logged in"
+    friends: null,            // null = not seeded yet; [{id, name, emoji, seed?}]
     saved: [],                // spot ids
     custom: [],               // user-dropped finds (full spot objects)
     feed: [],                 // cached live-activity feed (works as history offline)
@@ -45,6 +46,61 @@ const Store = (() => {
 
   function addCustom(spot) { state.custom.push(spot); save(); }
 
+  /* ——— Friends (no accounts — see Friend Codes below) ———
+     Five demo friends ship pre-added so the app feels alive; real people
+     are added by swapping Friend Codes. */
+  const SEED_FRIENDS = [
+    { id: 'f1', name: 'Ayesha', emoji: '🦊', seed: true },
+    { id: 'f2', name: 'Zara',   emoji: '🐼', seed: true },
+    { id: 'f3', name: 'Maya',   emoji: '🦋', seed: true },
+    { id: 'f4', name: 'Omar',   emoji: '🐯', seed: true },
+    { id: 'f5', name: 'Lina',   emoji: '🦉', seed: true },
+  ];
+
+  function ensureFriends() {
+    if (!Array.isArray(state.friends)) { state.friends = SEED_FRIENDS.map((f) => ({ ...f })); save(); }
+    return state.friends;
+  }
+  function ensureProfileId() {
+    if (state.profile && !state.profile.id) {
+      state.profile.id = 'u' + Math.random().toString(36).slice(2, 10);
+      save();
+    }
+  }
+  function addFriend(f) {
+    ensureFriends();
+    if (state.profile && f.id === state.profile.id) throw new Error("That's your own code!");
+    if (state.friends.some((x) => x.id === f.id)) throw new Error(`${f.name} is already your friend.`);
+    state.friends.push({ id: f.id, name: f.name, emoji: f.emoji });
+    save();
+  }
+  function removeFriend(id) {
+    ensureFriends();
+    state.friends = state.friends.filter((f) => f.id !== id);
+    save();
+  }
+  const isFriend = (id) => Array.isArray(state.friends) && state.friends.some((f) => f.id === id);
+
+  /* Friend Code: your identity as a tiny shareable token — like the Sync
+     Code, but just {id, name, emoji}. Swap codes, become friends. */
+  const FMAGIC = 'PULSEF.';
+  function exportFriendCode() {
+    ensureProfileId();
+    const p = state.profile || {};
+    const json = JSON.stringify({ i: p.id, n: p.name, e: p.emoji });
+    return FMAGIC + btoa(String.fromCharCode(...new TextEncoder().encode(json)));
+  }
+  function importFriendCode(code) {
+    code = (code || '').trim();
+    if (!code.startsWith(FMAGIC)) throw new Error('That does not look like a Friend Code.');
+    const bytes = Uint8Array.from(atob(code.slice(FMAGIC.length)), (ch) => ch.charCodeAt(0));
+    const p = JSON.parse(new TextDecoder().decode(bytes));
+    if (!p.i || !p.n) throw new Error('That Friend Code is missing its name.');
+    const friend = { id: p.i, name: String(p.n).slice(0, 20), emoji: p.e || '🙂' };
+    addFriend(friend);
+    return friend;
+  }
+
   function pushFeed(activity) {
     state.feed.unshift(activity);
     if (state.feed.length > 40) state.feed.length = 40;
@@ -59,7 +115,8 @@ const Store = (() => {
   const MAGIC = 'PULSE1.';
 
   function exportCode() {
-    const payload = { p: state.profile, s: state.saved, c: state.custom };
+    ensureProfileId();
+    const payload = { p: state.profile, s: state.saved, c: state.custom, f: state.friends };
     const json = JSON.stringify(payload);
     return MAGIC + btoa(String.fromCharCode(...new TextEncoder().encode(json)));
   }
@@ -72,6 +129,10 @@ const Store = (() => {
     if (payload.p) state.profile = payload.p;
     for (const id of payload.s || []) if (!state.saved.includes(id)) state.saved.push(id);
     for (const c of payload.c || []) if (!state.custom.some((x) => x.id === c.id)) state.custom.push(c);
+    if (Array.isArray(payload.f)) {
+      ensureFriends();
+      for (const f of payload.f) if (!state.friends.some((x) => x.id === f.id)) state.friends.push(f);
+    }
     save();
   }
 
@@ -80,5 +141,7 @@ const Store = (() => {
     get state() { return state; },
     toggleSaved, isSaved, addCustom, pushFeed,
     exportCode, importCode,
+    ensureFriends, ensureProfileId, addFriend, removeFriend, isFriend,
+    exportFriendCode, importFriendCode,
   };
 })();

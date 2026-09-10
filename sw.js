@@ -3,12 +3,13 @@
    instantly with airplane mode on. Relative paths keep it working under a
    GitHub Pages project path. */
 
-const CACHE = 'pulse-v2';
+const CACHE = 'pulse-v3';
 const SHELL = [
   './',
   './index.html',
   './css/styles.css',
   './js/data.js',
+  './js/covers.js',
   './js/store.js',
   './js/live.js',
   './js/radar.js',
