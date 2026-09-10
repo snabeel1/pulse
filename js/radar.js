@@ -9,10 +9,25 @@ const Radar = (() => {
   let onTap = null;     // (spotId) => void
   let hitboxes = [];    // { x, y, id } in CSS px, rebuilt each frame
   let pings = [];       // { bearing, dist, start }
+  let pal = null;       // theme palette, read from CSS tokens
+
+  function readPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const get = (name, fallback) => (cs.getPropertyValue(name) || fallback).trim();
+    pal = {
+      rgb: get('--radar-rgb', '45,212,191'),
+      ping: get('--radar-ping-rgb', '240,171,252'),
+      label: get('--radar-label', 'rgba(226,232,240,0.88)'),
+      you: get('--radar-you', '#5eead2'),
+      saved: get('--danger', '#fb7185'),
+    };
+  }
 
   function init(canvasEl, dataFn, tapFn) {
     canvas = canvasEl; getData = dataFn; onTap = tapFn;
     ctx = canvas.getContext('2d');
+    readPalette();
+    window.addEventListener('themechange', readPalette);
     resize();
     window.addEventListener('resize', resize);
     canvas.addEventListener('click', click);
@@ -53,15 +68,15 @@ const Radar = (() => {
 
     // Background disc
     const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-    bg.addColorStop(0, 'rgba(45,212,191,0.08)');
-    bg.addColorStop(1, 'rgba(45,212,191,0.01)');
+    bg.addColorStop(0, `rgba(${pal.rgb},0.09)`);
+    bg.addColorStop(1, `rgba(${pal.rgb},0.015)`);
     ctx.fillStyle = bg;
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
 
     // Rings + labels
-    ctx.strokeStyle = 'rgba(94,234,212,0.22)';
-    ctx.fillStyle = 'rgba(148,163,184,0.75)';
-    ctx.font = '10px system-ui, sans-serif';
+    ctx.strokeStyle = `rgba(${pal.rgb},0.3)`;
+    ctx.fillStyle = pal.label;
+    ctx.font = '10px Outfit, system-ui, sans-serif';
     ctx.textAlign = 'left';
     for (const f of [1 / 3, 2 / 3, 1]) {
       ctx.beginPath(); ctx.arc(cx, cy, R * f, 0, Math.PI * 2); ctx.stroke();
@@ -73,10 +88,10 @@ const Radar = (() => {
     ctx.beginPath();
     ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
     ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
-    ctx.strokeStyle = 'rgba(94,234,212,0.10)'; ctx.stroke();
-    ctx.fillStyle = 'rgba(94,234,212,0.8)';
+    ctx.strokeStyle = `rgba(${pal.rgb},0.12)`; ctx.stroke();
+    ctx.fillStyle = `rgba(${pal.rgb},0.9)`;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.font = 'bold 11px Outfit, system-ui, sans-serif';
     ctx.fillText('N', cx, cy - R - 8);
 
     // Sweep
@@ -85,16 +100,16 @@ const Radar = (() => {
       ? ctx.createConicGradient(sweep - Math.PI / 2, cx, cy)
       : null;
     if (grad) {
-      grad.addColorStop(0, 'rgba(45,212,191,0.35)');
-      grad.addColorStop(0.12, 'rgba(45,212,191,0.0)');
-      grad.addColorStop(1, 'rgba(45,212,191,0.0)');
+      grad.addColorStop(0, `rgba(${pal.rgb},0.35)`);
+      grad.addColorStop(0.12, `rgba(${pal.rgb},0.0)`);
+      grad.addColorStop(1, `rgba(${pal.rgb},0.0)`);
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
     }
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + Math.sin(sweep) * R, cy - Math.cos(sweep) * R);
-    ctx.strokeStyle = 'rgba(45,212,191,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = `rgba(${pal.rgb},0.6)`; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.lineWidth = 1;
 
     // Pings (friend discoveries)
@@ -105,7 +120,7 @@ const Radar = (() => {
       const [x, y] = polar(cx, cy, R, p.dist, p.bearing, maxRange);
       const age = (now - p.start) / 2600;
       ctx.beginPath(); ctx.arc(x, y, 6 + age * 34, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(240,171,252,${0.75 * (1 - age)})`;
+      ctx.strokeStyle = `rgba(${pal.ping},${0.75 * (1 - age)})`;
       ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
     }
 
@@ -128,14 +143,14 @@ const Radar = (() => {
       ctx.fillStyle = hexA(color, pulse); ctx.fill();
       if (s.saved) {
         ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(251,113,133,0.9)'; ctx.stroke();
+        ctx.strokeStyle = pal.saved; ctx.stroke();
       }
       if (labelled.has(s.spot.id)) {
         const ly = y - 12;
         if (!drawnLabels.some((p) => Math.abs(p.x - x) < 80 && Math.abs(p.y - ly) < 13)) {
-          ctx.font = '10px system-ui, sans-serif';
+          ctx.font = '10px Outfit, system-ui, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillStyle = 'rgba(226,232,240,0.85)';
+          ctx.fillStyle = pal.label;
           ctx.fillText(s.spot.emoji + ' ' + s.spot.name, x, ly);
           drawnLabels.push({ x, y: ly });
         }
@@ -145,9 +160,9 @@ const Radar = (() => {
 
     // You
     ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#5eead2'; ctx.fill();
+    ctx.fillStyle = pal.you; ctx.fill();
     ctx.beginPath(); ctx.arc(cx, cy, 9 + 3 * Math.sin(t / 400), 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(94,234,212,0.5)'; ctx.stroke();
+    ctx.strokeStyle = `rgba(${pal.rgb},0.5)`; ctx.stroke();
   }
 
   function hexA(hex, a) {

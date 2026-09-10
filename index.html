@@ -6,8 +6,22 @@
   <meta name="theme-color" content="#070b14">
   <meta name="description" content="Pulse — what's good around you, right now. Offline-first city discovery with a live friend layer. Built for the ACM-W Broken Brief tournament.">
   <title>Pulse — Nearby, Right Now</title>
+  <script>
+    /* Stamp the resolved theme before first paint — no flash in either mode. */
+    (function () {
+      try {
+        var pref = (JSON.parse(localStorage.getItem('pulse.v1') || '{}').theme) || 'auto';
+        var resolved = (pref === 'light' || pref === 'dark') ? pref
+          : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.dataset.theme = resolved;
+      } catch (e) { document.documentElement.dataset.theme = 'dark'; }
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -17,6 +31,7 @@
       <div class="topbar-right">
         <button id="locChip" class="chip" title="Change location">📍 …</button>
         <button id="netToggle" class="pill live" title="Connection"><span class="dot"></span> LIVE</button>
+        <button id="themeBtn" class="avatar" title="Theme" aria-label="Switch theme">🌓</button>
         <button id="profileBtn" class="avatar" title="Profile & Sync" aria-label="Profile and sync">🙂</button>
       </div>
     </header>
@@ -24,6 +39,10 @@
     <main>
       <!-- NOW feed -->
       <section id="view-now" class="view active">
+        <div class="hello">
+          <h1 id="helloTitle">Hey 👋</h1>
+          <p id="helloSub">Here's what's alive around you right now.</p>
+        </div>
         <div class="filters">
           <button class="chip toggle active" id="nowToggle">⏱ Happening now</button>
           <div class="cats" id="catChips">
@@ -48,11 +67,11 @@
         <p class="radar-hint">Tap a blip for details · pink rings are friends discovering things live ·
           works with <b>zero</b> signal</p>
         <div class="legend">
-          <span style="--c:#ff7a59">🍜 Food</span>
-          <span style="--c:#c084fc">🎉 Events</span>
-          <span style="--c:#38bdf8">🎢 Fun</span>
-          <span style="--c:#4ade80">🌴 Chill</span>
-          <span style="--c:#facc15">🎭 Culture</span>
+          <span data-cat="food">🍜 Food</span>
+          <span data-cat="event">🎉 Events</span>
+          <span data-cat="fun">🎢 Fun</span>
+          <span data-cat="chill">🌴 Chill</span>
+          <span data-cat="culture">🎭 Culture</span>
         </div>
       </section>
 

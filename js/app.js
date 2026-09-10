@@ -65,6 +65,45 @@ const App = (() => {
     return { cls: 'closed', label: `Closed · opens ${fmtHour(open)}`, order: 4 };
   }
 
+  /* ——— Theme (auto → light → dark) ——— */
+  const Theme = (() => {
+    const mq = matchMedia('(prefers-color-scheme: light)');
+    const ICONS = { auto: '🌓', light: '☀️', dark: '🌙' };
+    const resolve = (pref) => (pref === 'light' || pref === 'dark') ? pref : (mq.matches ? 'light' : 'dark');
+    function apply() {
+      const pref = Store.state.theme || 'auto';
+      const t = resolve(pref);
+      document.documentElement.dataset.theme = t;
+      document.querySelector('meta[name="theme-color"]')
+        ?.setAttribute('content', t === 'light' ? '#eef1f7' : '#070b14');
+      const btn = $('#themeBtn');
+      if (btn) {
+        btn.textContent = ICONS[pref];
+        btn.title = pref === 'auto' ? 'Theme: Auto (follows system)' : `Theme: ${pref[0].toUpperCase() + pref.slice(1)}`;
+      }
+      window.dispatchEvent(new CustomEvent('themechange'));
+    }
+    function cycle() {
+      const order = ['auto', 'light', 'dark'];
+      const next = order[(order.indexOf(Store.state.theme || 'auto') + 1) % order.length];
+      Store.state.theme = next; Store.save();
+      apply();
+      toast(next === 'auto' ? '🌓 Auto theme — follows your system'
+        : next === 'light' ? '☀️ Light mode' : '🌙 Dark mode');
+    }
+    mq.addEventListener('change', () => { if ((Store.state.theme || 'auto') === 'auto') apply(); });
+    return { apply, cycle };
+  })();
+
+  /* ——— Greeting ——— */
+  function renderHello() {
+    const h = new Date().getHours();
+    const greet = h < 5 ? 'Late-night wander' : h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 21 ? 'Good evening' : 'Tonight’s calling';
+    const name = Store.state.profile?.name;
+    $('#helloTitle').textContent = name ? `${greet}, ${name} 👋` : `${greet} 👋`;
+    $('#helloSub').textContent = `Here's what's alive near ${loc?.label || 'you'} right now.`;
+  }
+
   const fmtAgo = (ts) => {
     const s = Math.max(0, (Date.now() - ts) / 1000);
     if (s < 60) return 'just now';
@@ -118,7 +157,7 @@ const App = (() => {
           <p class="vibe">${esc(spot.vibe)}</p>
           <div class="meta">
             <span class="badge ${st.cls}">${st.label}</span>
-            <span class="tag" style="color:${cat.color}">${cat.emoji} ${cat.label}</span>
+            <span class="tag" data-cat="${spot.cat}">${cat.emoji} ${cat.label}</span>
             <span class="dist">${fmtDist(dist)} · ${travelTime(dist)}</span>
           </div>
         </div>
@@ -126,6 +165,7 @@ const App = (() => {
   }
 
   function renderFeed() {
+    renderHello();
     recomputeGeo();
     let list = geoCache;
     if (filter !== 'all') list = list.filter((g) => g.spot.cat === filter);
@@ -193,7 +233,7 @@ const App = (() => {
           <h2>${esc(spot.name)}</h2>
           <div class="meta">
             <span class="badge ${st.cls}">${st.label}</span>
-            <span class="tag" style="color:${cat.color}">${cat.emoji} ${cat.label}</span>
+            <span class="tag" data-cat="${spot.cat}">${cat.emoji} ${cat.label}</span>
           </div>
         </div>
       </div>
@@ -409,6 +449,7 @@ const App = (() => {
       closeModals(); setLocation(b.dataset.loc);
     });
 
+    $('#themeBtn').addEventListener('click', () => Theme.cycle());
     $('#profileBtn').addEventListener('click', openProfile);
     $('#fab').addEventListener('click', openDrop);
     $('#dropGo').addEventListener('click', submitDrop);
@@ -417,7 +458,7 @@ const App = (() => {
     $('#obStart').addEventListener('click', () => {
       const name = $('#obName').value.trim() || 'Explorer';
       Store.state.profile = { name, emoji: pickedEmoji };
-      Store.save(); refreshProfileBtn(); closeModals();
+      Store.save(); refreshProfileBtn(); closeModals(); renderHello();
       toast(`Welcome, ${name}! No password, no signup — you're in. ✨`);
     });
     $('#obName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#obStart').click(); });
@@ -425,7 +466,8 @@ const App = (() => {
     $('#pfSave').addEventListener('click', () => {
       const name = $('#pfName').value.trim() || 'Explorer';
       Store.state.profile = { name, emoji: pickedEmoji };
-      Store.save(); refreshProfileBtn(); closeModals(); toast('Profile updated ✔');
+      Store.save(); refreshProfileBtn(); closeModals(); renderHello();
+      toast('Profile updated ✔');
     });
     $('#syncCopy').addEventListener('click', async () => {
       const code = Store.exportCode();
@@ -451,6 +493,7 @@ const App = (() => {
     Store.load();
     demoEvents = makeDemoEvents(new Date());
     bind();
+    Theme.apply();
 
     const saved = LOCATIONS.find((l) => l.id === Store.state.locId);
     if (Store.state.locId === 'me' && Store.state.myLoc) {

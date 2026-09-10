@@ -3,7 +3,7 @@
    instantly with airplane mode on. Relative paths keep it working under a
    GitHub Pages project path. */
 
-const CACHE = 'pulse-v1';
+const CACHE = 'pulse-v2';
 const SHELL = [
   './',
   './index.html',
@@ -29,14 +29,19 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+const FONT_HOSTS = ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then((hit) =>
       hit ||
       fetch(e.request).then((res) => {
-        // Runtime-cache same-origin responses so updates stick for next offline run.
-        if (res.ok && new URL(e.request.url).origin === location.origin) {
+        // Runtime-cache same-origin responses (and webfonts) so they work
+        // offline on the next run. First offline visit falls back to the
+        // system font stack — by design.
+        const origin = new URL(e.request.url).origin;
+        if (res.ok && (origin === location.origin || FONT_HOSTS.includes(origin))) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(e.request, copy));
         }

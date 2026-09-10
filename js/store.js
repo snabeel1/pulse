@@ -13,6 +13,7 @@ const Store = (() => {
     feed: [],                 // cached live-activity feed (works as history offline)
     feedTs: null,             // when the feed last updated
     manualOffline: false,     // presenter's "simulate offline" switch
+    theme: 'auto',            // 'auto' | 'light' | 'dark'
     locId: 'diac',
     myLoc: null,              // last geolocation fix { lat, lng }
   });
